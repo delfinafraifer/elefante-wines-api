@@ -1,121 +1,106 @@
-# Elefante Wines API 
+# Elefante Wines API
 
-API REST de ecommerce para **Elefante Wines** desarrollada como proyecto de la materia **Backend (Optativa II)** — Tecnicatura Universitaria en Desarrollo de Software, Universidad Católica de Cuyo (San Juan, 2026).
+API REST de e-commerce para Elefante Wines, una bodega de San Juan. Proyecto final de la materia Backend (Optativa II) - Tecnicatura Universitaria en Desarrollo de Software, UCCuyo, 2026.
 
 ## Arquitectura
 
-El proyecto sigue **Clean Architecture** con 4 capas concéntricas, respetando la **Dependency Rule**: las dependencias apuntan hacia el centro (Domain).
+Clean Architecture con 4 capas. Las dependencias apuntan hacia adentro (Domain es el núcleo y no depende de nada).
+ElefanteWines.Api              -> Controllers, Swagger, Program.cs
+ElefanteWines.Infrastructure   -> EF Core, DbContext, Repositorios
+ElefanteWines.Application      -> Casos de uso (Commands/Queries) e interfaces
+ElefanteWines.Domain           -> Entidades y reglas de negocio
 
-ElefanteWines.Api              → Controllers, Swagger, Program.cs
-↓ depende de
-ElefanteWines.Infrastructure   → EF Core, DbContext, Repositorios, Configurations
-↓ depende de
-ElefanteWines.Application      → Interfaces de repositorios (contratos)
-↓ depende de
-ElefanteWines.Domain           → Entidades + reglas de negocio (núcleo)
+## Stack
 
-**Domain no depende de nada.** Si mañana cambiamos EF Core por MongoDB, solo tocamos Infrastructure.
+- .NET 8 + ASP.NET Core Web API
+- Entity Framework Core 8 con SQLite
+- MediatR para implementar CQRS
+- Repository Pattern
+- Swagger / OpenAPI
+- Migraciones y seed de datos
 
----
+## Casos de uso
 
-## Stack técnico
+La capa Application implementa los casos de uso separando Commands (escritura) y Queries (lectura).
 
-- **.NET 8** + ASP.NET Core Web API
-- **Entity Framework Core 8** con SQLite
-- **Repository Pattern** para abstraer el acceso a datos
-- **Dependency Injection** (Scoped) — built-in de .NET
-- **Swagger / OpenAPI** para documentación interactiva
-- **Migraciones** versionadas + Seed de datos iniciales
+Commands:
+- CreateWineCommand - crea un vino
+- CreateOrderCommand - crea una orden, valida cliente y descuenta stock de cada vino
 
----
+Queries:
+- GetAllWinesQuery - lista todos los vinos
+- GetWineByIdQuery - obtiene un vino por id
 
-## Entidades del dominio
+El flujo de un request es: Controller recibe el HTTP, lo convierte en Command/Query, lo manda al Handler vía MediatR, el Handler usa el repositorio para persistir o leer, y el repositorio habla con EF Core. El controller no tiene lógica de negocio.
 
-- **Wine** — vino con stock, precio, varietal y año
-- **Category** — Tintos / Blancos / Espumantes (cargadas por seed)
-- **Customer** — cliente con email único
-- **Order** — orden de compra con estado (Pending, Confirmed, Shipped, Delivered, Cancelled)
-- **OrderItem** — ítem de orden con subtotal calculado
+## Entidades
 
-Las reglas de negocio viven en el Domain. Por ejemplo, agregar un ítem a una orden descuenta el stock del vino automáticamente vía `Wine.ReduceStock()`.
+- Wine: vino con stock, precio, varietal y año
+- Category: Tintos, Blancos y Espumantes (cargadas por seed)
+- Customer: cliente, con email único
+- Order: orden de compra con estado (Pending, Confirmed, Shipped, Delivered, Cancelled)
+- OrderItem: ítem de una orden, subtotal calculado
 
----
+Las reglas de negocio viven en el Domain. Por ejemplo, cuando se agrega un ítem a una orden, la entidad Order llama internamente a Wine.ReduceStock() para descontar stock.
 
-## Cómo correr el proyecto
+## Cómo correrlo
 
-### Requisitos
-- .NET 8 SDK
-- Git
-
-### Pasos
+Requiere .NET 8 SDK y Git.
 
 ```bash
-# 1. Clonar el repo
-git clone https://github.com/delfinafraifer/ElefanteWines.git
-cd ElefanteWines
+git clone https://github.com/delfinafraifer/elefante-wines-api.git
+cd elefante-wines-api
 
-# 2. Restaurar paquetes
 dotnet restore
 
-# 3. Crear la base de datos (genera el archivo elefantewines.db con tablas + seed)
 dotnet ef database update --project ElefanteWines.Infrastructure --startup-project ElefanteWines.Api
 
-# 4. Ejecutar la API
 dotnet run --project ElefanteWines.Api
-
-# 5. Abrir Swagger en el navegador
-# http://localhost:5239/swagger
 ```
 
----
+Después abrir en el navegador: http://localhost:5239/swagger
 
-## Endpoints disponibles
+## Endpoints
 
-### Wines
-- `GET /api/wines` — listar todos
-- `GET /api/wines/{id}` — obtener uno por id
-- `GET /api/wines/search?term=malbec` — buscar por nombre
-- `POST /api/wines` — crear vino
-- `PUT /api/wines/{id}/price` — actualizar precio
-- `DELETE /api/wines/{id}` — eliminar
+Wines:
+- GET /api/wines
+- GET /api/wines/{id}
+- GET /api/wines/search?term=malbec
+- POST /api/wines
+- PUT /api/wines/{id}/price
+- DELETE /api/wines/{id}
 
-### Orders
-- `GET /api/orders` — listar todas
-- `GET /api/orders/{id}` — obtener con sus ítems
-- `GET /api/orders/by-customer/{customerId}` — órdenes de un cliente
-- `POST /api/orders` — crear orden (descuenta stock automáticamente)
+Orders:
+- GET /api/orders
+- GET /api/orders/{id}
+- GET /api/orders/by-customer/{customerId}
+- POST /api/orders
 
-### Customers
-- `GET /api/customers` — listar
-- `GET /api/customers/{id}` — obtener uno
-- `POST /api/customers` — registrar cliente nuevo
+Customers:
+- GET /api/customers
+- GET /api/customers/{id}
+- POST /api/customers
 
-### Categories
-- `GET /api/categories` — listar (3 categorías cargadas por seed)
-- `GET /api/categories/{id}` — obtener una
+Categories:
+- GET /api/categories
+- GET /api/categories/{id}
 
----
+## Notas de implementación
 
-## Decisiones de diseño
+- Los ids son Guid generados en el Domain, no autoincrementales.
+- Uso AsNoTracking() en las queries de solo lectura.
+- El enum OrderStatus se guarda como string en SQLite y se serializa como string en el JSON.
+- Las entidades tienen constructor privado sin parámetros (lo necesita EF Core) y los setters son privados, así se modifica solo a través de métodos de negocio.
+- CQRS se aplica en los casos de uso principales (crear vino, crear orden, listar/obtener vinos). En operaciones simples como DELETE o actualizar precio uso Repository directo porque agregar un Command no aportaba mucho.
 
-- **Guid como id**: generado en el Domain (no autoincremental). Permite crear entidades sin viaje a la BD.
-- **`AsNoTracking()` en lecturas**: reduce memoria, EF no trackea entidades que no se van a modificar.
-- **Enum como string en BD**: `OrderStatus` se persiste como `"Pending"` en SQLite, no como `0`. Más legible al inspeccionar la BD.
-- **Constructores privados sin parámetros**: requeridos por EF Core para materializar entidades desde la BD, pero ocultos para el resto del código.
-- **Propiedades con setter privado**: la entidad solo se modifica a través de sus métodos de negocio (`UpdatePrice`, `ReduceStock`, etc.), no por asignación directa.
+## Unidades
 
----
-
-## Unidades cubiertas
-
-- **Unidad 1** — Fundamentos: Clean Architecture, SOLID, Dependency Rule
-- **Unidad 2** — .NET Core: Controllers, Dependency Injection, Swagger
-- **Unidad 3** — Domain: Entidades, reglas de negocio, encapsulamiento
-- **Unidad 3** — Application: Interfaces (puertos)
-- **Unidad 4** — Infrastructure: EF Core, DbContext, Fluent API, Repository, Migraciones, Seed
-
----
+- Unidad 1: Clean Architecture, SOLID, Dependency Rule
+- Unidad 2: .NET Core, Controllers, DI, Swagger
+- Unidad 3 Domain: Entidades, reglas de negocio
+- Unidad 3 Application: Commands, Queries, MediatR, interfaces de repositorios
+- Unidad 4 Infrastructure: EF Core, Fluent API, Repository, Migraciones, Seed
 
 ## Autora
 
-Proyecto desarrollado por Delfina Fraifer — Tecnicatura Universitaria en Desarrollo de Software, UCCuyo, 2026.
+Delfina Fraifer
