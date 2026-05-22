@@ -1,5 +1,8 @@
+using ElefanteWines.Application.Features.Wines.Commands.CreateWine;
+using ElefanteWines.Application.Features.Wines.Queries.GetAllWines;
+using ElefanteWines.Application.Features.Wines.Queries.GetWineById;
 using ElefanteWines.Application.Interfaces;
-using ElefanteWines.Domain.Entities;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ElefanteWines.Api.Controllers;
@@ -8,58 +11,41 @@ namespace ElefanteWines.Api.Controllers;
 [Route("api/[controller]")]
 public class WinesController : ControllerBase
 {
-    private readonly IWineRepository _wineRepository;
+    private readonly IMediator _mediator;
+    private readonly IWineRepository _wineRepository;  // para operaciones simples (update, delete)
 
-    public WinesController(IWineRepository wineRepository)
+    public WinesController(IMediator mediator, IWineRepository wineRepository)
     {
+        _mediator = mediator;
         _wineRepository = wineRepository;
     }
 
-    // GET /api/wines
+    // GET /api/wines — usa Query
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct)
     {
-        var wines = await _wineRepository.GetAllAsync(ct);
+        var wines = await _mediator.Send(new GetAllWinesQuery(), ct);
         return Ok(wines);
     }
 
-    // GET /api/wines/{id}
+    // GET /api/wines/{id} — usa Query
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
-        var wine = await _wineRepository.GetByIdAsync(id, ct);
-        if (wine is null) return NotFound(new { message = $"Vino con id {id} no encontrado." });
+        var wine = await _mediator.Send(new GetWineByIdQuery(id), ct);
+        if (wine is null)
+            return NotFound(new { message = $"Vino con id {id} no encontrado." });
         return Ok(wine);
     }
 
-    // GET /api/wines/search?term=malbec
-    [HttpGet("search")]
-    public async Task<IActionResult> Search([FromQuery] string term, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(term))
-            return BadRequest(new { message = "El término de búsqueda es obligatorio." });
-
-        var wines = await _wineRepository.SearchByNameAsync(term, ct);
-        return Ok(wines);
-    }
-
-    // POST /api/wines
+    // POST /api/wines — usa Command
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateWineDto dto, CancellationToken ct)
+    public async Task<IActionResult> Create([FromBody] CreateWineCommand command, CancellationToken ct)
     {
         try
         {
-            var wine = new Wine(
-                dto.Name,
-                dto.Description,
-                dto.Price,
-                dto.Stock,
-                dto.CategoryId,
-                dto.Varietal,
-                dto.Year);
-
-            await _wineRepository.AddAsync(wine, ct);
-            return CreatedAtAction(nameof(GetById), new { id = wine.Id }, wine);
+            var wineId = await _mediator.Send(command, ct);
+            return CreatedAtAction(nameof(GetById), new { id = wineId }, new { id = wineId });
         }
         catch (ArgumentException ex)
         {
@@ -67,12 +53,13 @@ public class WinesController : ControllerBase
         }
     }
 
-    // PUT /api/wines/{id}/price
+    // PUT /api/wines/{id}/price — operación simple, sigue usando Repository
     [HttpPut("{id:guid}/price")]
     public async Task<IActionResult> UpdatePrice(Guid id, [FromBody] UpdatePriceDto dto, CancellationToken ct)
     {
         var wine = await _wineRepository.GetByIdAsync(id, ct);
-        if (wine is null) return NotFound(new { message = $"Vino con id {id} no encontrado." });
+        if (wine is null)
+            return NotFound(new { message = $"Vino con id {id} no encontrado." });
 
         try
         {
@@ -86,27 +73,17 @@ public class WinesController : ControllerBase
         }
     }
 
-    // DELETE /api/wines/{id}
+    // DELETE /api/wines/{id} — operación simple, sigue usando Repository
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
         var exists = await _wineRepository.ExistsAsync(id, ct);
-        if (!exists) return NotFound(new { message = $"Vino con id {id} no encontrado." });
+        if (!exists)
+            return NotFound(new { message = $"Vino con id {id} no encontrado." });
 
         await _wineRepository.DeleteAsync(id, ct);
         return NoContent();
     }
 }
-
-// DTOs (Data Transfer Objects) — clases planas para recibir datos del cliente.
-// Los DTOs van acá porque son contratos del API, no del dominio.
-public record CreateWineDto(
-    string Name,
-    string Description,
-    decimal Price,
-    int Stock,
-    Guid CategoryId,
-    string? Varietal,
-    int? Year);
 
 public record UpdatePriceDto(decimal NewPrice);

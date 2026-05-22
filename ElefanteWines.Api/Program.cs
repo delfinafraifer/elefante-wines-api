@@ -23,6 +23,11 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// Registra TODOS los Handlers de MediatR del assembly de Application
+builder.Services.AddMediatR(cfg =>
+    cfg.RegisterServicesFromAssembly(
+        typeof(ElefanteWines.Application.Features.Wines.Commands.CreateWine.CreateWineCommand).Assembly));
+
 // Registra TODO Infrastructure (DbContext + repositorios) en una sola línea
 builder.Services.AddInfrastructure(builder.Configuration);
 
