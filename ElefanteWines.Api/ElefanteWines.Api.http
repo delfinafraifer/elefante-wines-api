@@ -1,0 +1,6 @@
+@ElefanteWines.Api_HostAddress = http://localhost:5239
+
+GET {{ElefanteWines.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
